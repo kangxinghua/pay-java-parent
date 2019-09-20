@@ -16,6 +16,7 @@ import com.egzosn.pay.common.util.MatrixToImageWriter;
 import com.egzosn.pay.common.util.Util;
 import com.egzosn.pay.common.util.sign.SignUtils;
 import com.egzosn.pay.common.util.str.StringUtils;
+
 import java.awt.image.BufferedImage;
 import java.math.BigDecimal;
 import java.util.*;
@@ -24,12 +25,12 @@ import java.util.*;
  * 支付宝支付服务
  *
  * @author egan
- *         <p>
- *         email egzosn@gmail.com
- *         date 2017-2-22 20:09
+ * <p>
+ * email egzosn@gmail.com
+ * date 2017-2-22 20:09
  */
 public class AliPayService extends BasePayService<AliPayConfigStorage> {
-    
+
     /**
      * 正式测试环境
      */
@@ -38,11 +39,11 @@ public class AliPayService extends BasePayService<AliPayConfigStorage> {
      * 沙箱测试环境账号
      */
     private static final String DEV_REQ_URL = "https://openapi.alipaydev.com/gateway.do";
-    
+
     public static final String SIGN = "sign";
-    
+
     public static final String SUCCESS_CODE = "10000";
-    
+
     public static final String CODE = "code";
     /**
      * 附加参数
@@ -70,6 +71,7 @@ public class AliPayService extends BasePayService<AliPayConfigStorage> {
     public String getReqUrl(TransactionType transactionType) {
         return payConfigStorage.isTest() ? DEV_REQ_URL : HTTPS_REQ_URL;
     }
+
     /**
      * 获取对应的请求地址
      *
@@ -122,7 +124,7 @@ public class AliPayService extends BasePayService<AliPayConfigStorage> {
                 if (SIGN.equals(entry.getKey())) {
                     continue;
                 }
-                TreeMap<String, Object> response = new TreeMap((Map<String, Object> )entry.getValue());
+                TreeMap<String, Object> response = new TreeMap((Map<String, Object>) entry.getValue());
                 LinkedHashMap<Object, Object> linkedHashMap = new LinkedHashMap<>();
                 linkedHashMap.put(CODE, response.remove(CODE));
                 linkedHashMap.put("msg", response.remove("msg"));
@@ -171,8 +173,19 @@ public class AliPayService extends BasePayService<AliPayConfigStorage> {
      */
     @Override
     public Map<String, Object> orderInfo(PayOrder order) {
-
-        return setSign(getOrder(order));
+        Map<String, Object> orderInfo = setSign(getOrder(order));
+        switch ((AliTransactionType) order.getTransactionType()) {
+            case UNIFIED:
+                JSONObject result = requestTemplate.getForObject(getReqUrl() + "?" + UriVariables.getMapToParameters(orderInfo), JSONObject.class);
+                JSONObject response = result.getJSONObject("alipay_trade_create_response");
+                if (SUCCESS_CODE.equals(response.getString(CODE))) {
+                    orderInfo.put("trade_no", response.get("trade_no"));
+                } else {
+                    LOG.info("收款失败" + result);
+                }
+                break;
+        }
+        return orderInfo;
     }
 
 
@@ -221,6 +234,11 @@ public class AliPayService extends BasePayService<AliPayConfigStorage> {
                 bizContent.put("scene", order.getTransactionType().toString().toLowerCase());
                 bizContent.put(PRODUCT_CODE, "FACE_TO_FACE_PAYMENT");
                 bizContent.put("auth_code", order.getAuthCode());
+                break;
+            case UNIFIED:
+                bizContent.put(PRODUCT_CODE, "FACE_TO_FACE_PAYMENT");
+                bizContent.put("buyer_id", order.getOpenid());
+                orderInfo.put(RETURN_URL, payConfigStorage.getReturnUrl());
                 break;
 
         }
@@ -284,13 +302,12 @@ public class AliPayService extends BasePayService<AliPayConfigStorage> {
         String bizContent = (String) orderInfo.remove(BIZ_CONTENT);
         formHtml.append(getReqUrl()).append("?").append(UriVariables.getMapToParameters(orderInfo))
                 .append("\" method=\"").append(method.name().toLowerCase()).append("\">");
-        formHtml.append("<input type=\"hidden\" name=\"biz_content\" value=\'" ).append( bizContent ).append( "\'/>");
+        formHtml.append("<input type=\"hidden\" name=\"biz_content\" value=\'").append(bizContent).append("\'/>");
         formHtml.append("</form>");
         formHtml.append("<script>document.forms['_alipaysubmit_'].submit();</script>");
 
         return formHtml.toString();
     }
-
 
 
     /**
@@ -300,7 +317,7 @@ public class AliPayService extends BasePayService<AliPayConfigStorage> {
      * @return 返回二维码信息,，支付时需要的
      */
     @Override
-    public String getQrPay(PayOrder order){
+    public String getQrPay(PayOrder order) {
         Map<String, Object> orderInfo = orderInfo(order);
         //预订单
         JSONObject result = getHttpRequestTemplate().postForObject(getReqUrl() + "?" + UriVariables.getMapToParameters(orderInfo), null, JSONObject.class);
@@ -333,10 +350,11 @@ public class AliPayService extends BasePayService<AliPayConfigStorage> {
 
     /**
      * 统一收单交易结算接口
+     *
      * @param order 交易结算信息
      * @return 结算结果
      */
-    public Map<String, Object> settle(OrderSettle order){
+    public Map<String, Object> settle(OrderSettle order) {
         //获取公共参数
         Map<String, Object> parameters = getPublicParameters(AliTransactionType.SETTLE);
         parameters.put(BIZ_CONTENT, JSON.toJSONString(order.toBizContent()));
@@ -396,7 +414,7 @@ public class AliPayService extends BasePayService<AliPayConfigStorage> {
      * @param totalAmount  总金额
      * @return 返回支付方申请退款后的结果
      * @see #refund(RefundOrder, com.egzosn.pay.common.api.Callback)
-     *  @deprecated 版本替代 {@link #refund(RefundOrder, com.egzosn.pay.common.api.Callback)}
+     * @deprecated 版本替代 {@link #refund(RefundOrder, com.egzosn.pay.common.api.Callback)}
      */
     @Deprecated
     @Override

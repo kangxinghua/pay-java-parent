@@ -49,6 +49,11 @@ public enum  AliTransactionType implements TransactionType {
      * 声波付
      */
     WAVE_CODE("alipay.trade.pay"),
+
+    /**
+     * 统一收单交易创建接口
+     */
+    UNIFIED("alipay.trade.create"),
     //交易辅助接口
 
     /**
